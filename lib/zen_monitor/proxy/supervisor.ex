@@ -5,7 +5,7 @@ defmodule ZenMonitor.Proxy.Supervisor do
   See `ZenMonitor.Proxy`, `ZenMonitor.Proxy.Tables`, and `ZenMonitor.Proxy.Batcher` for more
   information about the supervised processes.
 
-  There are many `ZenMonitor.Proxy.Batcher` processes, which are managed by a `GenRegistry`.
+  There are many `ZenMonitor.Proxy.Batcher` processes, which are managed by a `Registry`.
   These are keyed by the pid of the `ZenMonitor.Local.Connector` the Batcher is responsible for.
 
   This supervisor uses the `:rest_for_one` strategy, so the order of the children is important and
@@ -21,7 +21,7 @@ defmodule ZenMonitor.Proxy.Supervisor do
     children = [
       ZenMonitor.Proxy.Tables,
       ZenMonitor.Proxy,
-      GenRegistry.Spec.child_spec(ZenMonitor.Proxy.Batcher)
+      {Registry, keys: :unique, name: ZenMonitor.Proxy.Batcher},
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

@@ -87,9 +87,9 @@ defmodule ZenMonitor.Truncator do
   argument is provided, providing a call-site second argument will override this configuration.
   """
 
-  @max_binary_size Application.get_env(:zen_monitor, :max_binary_size, 1024)
+  @max_binary_size Application.compile_env(:zen_monitor, :max_binary_size, 1024)
   @truncation_binary_size @max_binary_size - 3
-  @truncation_depth Application.get_env(:zen_monitor, :truncation_depth, 3)
+  @truncation_depth Application.compile_env(:zen_monitor, :truncation_depth, 3)
 
   @doc """
   Truncates a term to a given depth

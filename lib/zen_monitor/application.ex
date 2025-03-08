@@ -9,14 +9,10 @@ defmodule ZenMonitor.Application do
   """
   use Application
 
-  alias ZenMonitor.Metrics
-
   def start(_type, _args) do
     children = [
       ZenMonitor.Supervisor
     ]
-
-    Metrics.register()
 
     Supervisor.start_link(children, strategy: :one_for_one)
   end

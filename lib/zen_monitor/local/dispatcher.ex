@@ -25,7 +25,6 @@ defmodule ZenMonitor.Local.Dispatcher do
   calculation.
   """
   use GenStage
-  use Instruments.CustomFunctions, prefix: "zen_monitor.local.dispatcher"
 
   alias ZenMonitor.Local.Tables
 
@@ -123,7 +122,6 @@ defmodule ZenMonitor.Local.Dispatcher do
   """
   def handle_events(events, _from, producer) do
     delivered = length(events)
-    increment("events.delivered", delivered)
 
     messages =
       for {subscriber, {:DOWN, ref, :process, _, _} = message} <- events,
@@ -137,7 +135,12 @@ defmodule ZenMonitor.Local.Dispatcher do
     # length of events delivered.
     effective_demand = min(delivered, demand_amount())
     processed = length(messages)
-    increment("events.processed", processed)
+
+    :telemetry.execute(
+      [:zen_monitor, :local_dispatcher, :dispatch_events],
+      %{delivered: delivered, processed: processed},
+      %{}
+    )
 
     # The unfulfilled demand is the difference between the effective demand and the actual events
     unfulfilled = effective_demand - processed

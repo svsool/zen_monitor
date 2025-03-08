@@ -2,7 +2,7 @@ defmodule ChildNode do
   @moduledoc """
   ChildNode provides facilities for starting another erlang node on the current machine.
 
-  This module enhances and abstracts the erlang `slave` module. After calling `slave.start` to
+  This module enhances and abstracts the erlang `peer` module. After calling `peer.start` to
   make sure the child node is running, it ensures that Elixir is started, after which it will run
   any function passed in as the `:on_start` param. This function must be compiled and loaded on
   both nodes.
@@ -16,7 +16,7 @@ defmodule ChildNode do
   If additional logging is required, set `enable_sasl` option to `true`.
   """
 
-  @type param :: {:enable_sasl, boolean} | {:on_start, (() -> any)}
+  @type param :: {:enable_sasl, boolean} | {:on_start, (-> any)}
   @type params :: [param]
 
   defmodule Runner do
@@ -68,25 +68,31 @@ defmodule ChildNode do
       {:ok, _} = Node.start(:"local@0.0.0.0")
     end
 
-    code_paths = Enum.join(:code.get_path(), " ")
-
     default_node_start_args = [
-      "-setcookie #{Node.get_cookie()}",
-      "-pa #{code_paths}",
-      "-connect_all false"
+      ~c"-setcookie #{Node.get_cookie() |> Atom.to_charlist()}",
+      ~c"-connect_all",
+      ~c"false"
     ]
 
     node_start_args =
       if params[:enable_sasl] do
-        default_node_start_args ++ ["-logger handle_sasl_reports true"]
+        default_node_start_args ++ [~c"-logger", ~c"handle_sasl_reports true"]
       else
         default_node_start_args
       end
-      |> Enum.join(" ")
-      |> String.to_charlist()
 
     node_name = to_node_name(node_name)
-    {:ok, node_name} = :slave.start_link('0.0.0.0', node_name, node_start_args)
+
+    {:ok, node_pid, node_name} =
+      :peer.start_link(%{
+        host: ~c"0.0.0.0",
+        name: node_name,
+        connection: :standard_io,
+        args: node_start_args
+      })
+
+    :rpc.call(node_name, :code, :add_paths, [:code.get_path()])
+
     {:ok, _} = :rpc.call(node_name, :application, :ensure_all_started, [:elixir])
 
     on_start = params[:on_start]
@@ -94,7 +100,7 @@ defmodule ChildNode do
 
     case :rpc.call(node_name, __MODULE__, :on_start, rpc_args, timeout) do
       {:ok, start_fn_results} ->
-        {:ok, node_name, start_fn_results}
+        {:ok, node_name, node_pid, start_fn_results}
 
       {:badrpc, :timeout} ->
         {:error, :timeout}

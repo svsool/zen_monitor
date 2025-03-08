@@ -170,7 +170,7 @@ defmodule TruncatorTest do
         c: :d,
         e: :f,
         g: :h,
-        i: :j,
+        i: :j
       }
 
       assert :truncated == Truncator.truncate(unknown_struct)

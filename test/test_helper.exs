@@ -90,6 +90,6 @@ defmodule Helper do
   end
 end
 
-Application.ensure_all_started(:instruments)
+Application.ensure_all_started(:telemetry)
 
 ExUnit.start()

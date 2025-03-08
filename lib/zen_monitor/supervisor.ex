@@ -13,7 +13,8 @@ defmodule ZenMonitor.Supervisor do
   def init(_opts) do
     children = [
       ZenMonitor.Local.Supervisor,
-      ZenMonitor.Proxy.Supervisor
+      ZenMonitor.Proxy.Supervisor,
+      {DynamicSupervisor, name: ZenMonitor.DynamicSupervisor, strategy: :one_for_one},
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

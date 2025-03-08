@@ -9,7 +9,7 @@ defmodule ZenMonitor.Local do
   monitors if they crash.
   """
   use GenStage
-  use Instruments.CustomFunctions, prefix: "zen_monitor.local"
+
   alias ZenMonitor.Local.{Connector, Tables}
 
   @typedoc """
@@ -72,7 +72,8 @@ defmodule ZenMonitor.Local do
   """
   @spec monitor(target :: ZenMonitor.destination()) :: reference
   def monitor(target) do
-    increment("monitor")
+    :telemetry.execute([:zen_monitor, :local, :monitor], %{}, %{})
+
     ref = make_ref()
     me = self()
 
@@ -101,7 +102,8 @@ defmodule ZenMonitor.Local do
   """
   @spec demonitor(ref :: reference, options :: [:flush]) :: true
   def demonitor(ref, options \\ []) when is_reference(ref) do
-    increment("demonitor")
+    :telemetry.execute([:zen_monitor, :local, :demonitor], %{}, %{})
+
     me = self()
 
     # First consume the reference
@@ -263,7 +265,7 @@ defmodule ZenMonitor.Local do
         {:queue.in(item, acc), len + 1}
       end)
 
-    increment("enqueue", new_length - length)
+    :telemetry.execute([:zen_monitor, :local, :enqueue], %{length: new_length - length}, %{})
 
     {:noreply, [], %State{state | batch: batch, length: new_length}}
   end

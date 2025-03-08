@@ -5,10 +5,10 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
   alias ZenMonitor.Proxy.Batcher
 
   setup do
-    {:ok, remote, nil} = ChildNode.start_link(:zen_monitor, :Remote)
+    {:ok, remote, remote_peer_pid, nil} = ChildNode.start_link(:zen_monitor, :Remote)
 
     start_supervised(ZenMonitor.Supervisor)
-    {:ok, _} = Application.ensure_all_started(:instruments)
+    {:ok, _} = Application.ensure_all_started(:telemetry)
 
     on_exit(fn ->
       Node.monitor(remote, true)
@@ -18,7 +18,7 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
       end
     end)
 
-    {:ok, remote: remote}
+    {:ok, remote: remote, remote_peer_pid: remote_peer_pid}
   end
 
   @doc """
@@ -74,7 +74,7 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
     end
 
     test "a message is dispatched when the monitored process dies", ctx do
-      target = ctx.remote_pid()
+      target = ctx.remote_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -87,8 +87,8 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
     end
 
     test "only the dead process gets a message dispatched", ctx do
-      target = ctx.remote_pid()
-      alternate = ctx.alternate_remote_pid()
+      target = ctx.remote_pid
+      alternate = ctx.alternate_remote_pid
 
       # Monitor both remote processes
       ref = ZenMonitor.monitor(target)
@@ -103,7 +103,7 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
     end
 
     test "monitoring a dead process should dispatch a :DOWN with :noproc", ctx do
-      target = ctx.remote_pid()
+      target = ctx.remote_pid
 
       # Kill the remote process
       Process.exit(target, :kill)
@@ -117,7 +117,7 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
 
     test "monitoring a process after down and dispatched message dispatches another message",
          ctx do
-      target = ctx.remote_pid()
+      target = ctx.remote_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -136,8 +136,8 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
     end
 
     test "all monitored processes get delivered at nodedown", ctx do
-      target = ctx.remote_pid()
-      alternate = ctx.alternate_remote_pid()
+      target = ctx.remote_pid
+      alternate = ctx.alternate_remote_pid
 
       # Monitor both remote processes
       target_ref = ZenMonitor.monitor(target)
@@ -147,7 +147,7 @@ defmodule ZenMonitor.Local.Dispatcher.Test do
       Process.sleep(50)
 
       # Kill the remote node
-      :slave.stop(ctx.remote)
+      :peer.stop(ctx.remote_peer_pid)
 
       # Assert delivery of both :DOWN :nodedown messages
       assert_receive {:DOWN, ^target_ref, :process, ^target, {:zen_monitor, :nodedown}}, 1000

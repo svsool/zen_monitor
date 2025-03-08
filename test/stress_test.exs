@@ -18,7 +18,7 @@ defmodule ZenMonitor.Stress.Test do
     tune(node(), :connector, :fast)
 
     start_supervised(ZenMonitor.Supervisor)
-    {:ok, compatible, nil} = ChildNode.start_link(:zen_monitor, :Compatible)
+    {:ok, compatible, compatible_peer_pid, nil} = ChildNode.start_link(:zen_monitor, :Compatible)
 
     on_exit(fn ->
       Node.monitor(compatible, true)
@@ -31,7 +31,7 @@ defmodule ZenMonitor.Stress.Test do
     # Make the remote batcher flush at a controlled rate
     tune(compatible, :batcher, :slow)
 
-    {:ok, down: :down@down, compatible: compatible, remotes: [compatible]}
+    {:ok, down: :down@down, compatible: compatible, compatible_peer_pid: compatible_peer_pid, remotes: [compatible]}
   end
 
   def tune(remote, :batcher, :fast) do

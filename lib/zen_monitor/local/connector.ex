@@ -2,7 +2,7 @@ defmodule ZenMonitor.Local.Connector do
   @moduledoc """
   `ZenMonitor.Local.Connector` performs a variety of duties.  For every remote that a the local
   is interested in monitoring processes on there will be a dedicated `ZenMonitor.Local.Connector`.
-  This collection of Connectors are managed by a `GenRegistry` registered under the
+  This collection of Connectors are managed by a `Registry` registered under the
   `ZenMonitor.Local.Connector` atom.
 
   # Connecting and Monitoring the remote `ZenMonitor.Proxy`
@@ -49,10 +49,10 @@ defmodule ZenMonitor.Local.Connector do
   more information.
   """
   use GenServer
-  use Instruments.CustomFunctions, prefix: "zen_monitor.local.connector"
 
   alias ZenMonitor.Local
   alias ZenMonitor.Local.Tables
+  alias ZenMonitor.Utils
 
   @base_penalty 1_000
   @maximum_penalty 60_000
@@ -119,14 +119,7 @@ defmodule ZenMonitor.Local.Connector do
   """
   @spec get_for_node(remote :: node()) :: pid()
   def get_for_node(remote) when is_atom(remote) do
-    case GenRegistry.lookup(__MODULE__, remote) do
-      {:ok, connector} ->
-        connector
-
-      {:error, :not_found} ->
-        {:ok, connector} = GenRegistry.lookup_or_start(__MODULE__, remote, [remote])
-        connector
-    end
+    Utils.lookup_or_start(__MODULE__, remote, [remote])
   end
 
   @doc """
@@ -281,6 +274,7 @@ defmodule ZenMonitor.Local.Connector do
   ## Server
 
   def init(remote) do
+    Registry.register(__MODULE__, remote, self())
     schedule_sweep()
     monitors = :ets.new(:monitors, [:private, :ordered_set])
     {:ok, %State{remote: remote, monitors: monitors}}
@@ -336,7 +330,7 @@ defmodule ZenMonitor.Local.Connector do
     # Enqueue the subscribe instruction if it isn't already monitored
     new_state =
       if should_subscribe? do
-        increment("enqueue", 1, tags: ["op:subscribe"])
+        :telemetry.execute([:zen_monitor, :local_connector, :enqueue], %{}, %{op: "subscribe"})
         %State{state | batch: :queue.in({:subscribe, target}, batch), length: length + 1}
       else
         state
@@ -362,7 +356,7 @@ defmodule ZenMonitor.Local.Connector do
     # Enqueue the unsubscribe instruction if the target no longer exists
     state =
       if should_unsubscribe? do
-        increment("enqueue", 1, tags: ["op:unsubscribe"])
+        :telemetry.execute([:zen_monitor, :local_connector, :enqueue], %{}, %{op: "unsubscribe"})
         %State{state | batch: :queue.in({:unsubscribe, target}, batch), length: length + 1}
       else
         state
@@ -446,7 +440,7 @@ defmodule ZenMonitor.Local.Connector do
   end
 
   def handle_info(_, %State{} = state) do
-    increment("unhandled_info")
+    :telemetry.execute([:zen_monitor, :local_connector, :unhandled_info], %{}, %{})
     {:noreply, state}
   end
 
@@ -495,7 +489,13 @@ defmodule ZenMonitor.Local.Connector do
   @spec do_sweep(state :: State.t()) :: State.t()
   defp do_sweep(%State{batch: batch, length: length} = state) do
     {summary, overflow, new_length} = chunk(batch, length)
-    increment("sweep", length - new_length)
+
+    :telemetry.execute(
+      [:zen_monitor, :local_connector, :sweep],
+      %{length: length - new_length},
+      %{}
+    )
+
     do_subscribe(state, summary)
     %State{state | batch: overflow, length: new_length}
   end

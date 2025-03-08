@@ -18,7 +18,7 @@ defmodule ZenMonitor.Mixfile do
 
   def application do
     [
-      extra_applications: [:logger, :instruments],
+      extra_applications: [:logger],
       mod: {ZenMonitor.Application, []}
     ]
   end
@@ -32,8 +32,8 @@ defmodule ZenMonitor.Mixfile do
   defp deps do
     [
       {:gen_stage, "~> 1.0"},
-      {:instruments, "~> 2.1"},
-      {:gen_registry, "~> 1.0"},
+      {:telemetry_metrics, "~> 1.0"},
+      {:telemetry_poller, "~> 1.0"},
       {:ex_doc, "~> 0.27.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: :dev, runtime: false}
     ]

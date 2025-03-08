@@ -49,7 +49,7 @@ defmodule ZenMonitor.BlackBox.Test do
   end
 
   def start_compatible_remote(ctx) do
-    {:ok, compatible, nil} = ChildNode.start_link(:zen_monitor, :Compatible)
+    {:ok, compatible, compatible_peer_pid, nil} = ChildNode.start_link(:zen_monitor, :Compatible)
 
     # Perform an initial connect like discovery would
     Node.connect(compatible)
@@ -62,11 +62,14 @@ defmodule ZenMonitor.BlackBox.Test do
       end
     end)
 
-    {:ok, compatible: compatible, remotes: [compatible | ctx.remotes()]}
+    {:ok,
+     compatible: compatible,
+     compatible_peer_pid: compatible_peer_pid,
+     remotes: [compatible | ctx.remotes]}
   end
 
   def start_incompatible_remote(_) do
-    {:ok, incompatible, nil} = ChildNode.start_link(:elixir, :Incompatible)
+    {:ok, incompatible, incompatible_peer_pid, nil} = ChildNode.start_link(:elixir, :Incompatible)
 
     # Perform an initial connect like discovery would
     Node.connect(incompatible)
@@ -79,7 +82,7 @@ defmodule ZenMonitor.BlackBox.Test do
       end
     end)
 
-    {:ok, incompatible: incompatible}
+    {:ok, incompatible: incompatible, incompatible_peer_pid: incompatible_peer_pid}
   end
 
   def start_compatible_processes(ctx) do
@@ -112,7 +115,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "local process returns a :DOWN message if it goes down", ctx do
-      target = ctx.local_pid()
+      target = ctx.local_pid
 
       # Monitor the local process
       ref = ZenMonitor.monitor(target)
@@ -130,7 +133,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple monitors all get fired", ctx do
-      target = ctx.local_pid()
+      target = ctx.local_pid
 
       # Monitor the local process multiple times
       ref_a = ZenMonitor.monitor(target)
@@ -152,7 +155,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "an already down local process returns a :DOWN message", ctx do
-      target = ctx.local_pid()
+      target = ctx.local_pid
 
       # Kill the local process, before the monitors
       Process.exit(target, :kill)
@@ -169,7 +172,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple monitors for already down local process returns :DOWN messages", ctx do
-      target = ctx.local_pid()
+      target = ctx.local_pid
 
       # Kill the local process, before the monitors
       Process.exit(target, :kill)
@@ -191,7 +194,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "mixed monitors established before and after process down", ctx do
-      target = ctx.local_pid()
+      target = ctx.local_pid
 
       # Establish some monitors before the pid is killed
       ref_alive_a = ZenMonitor.monitor(target)
@@ -221,8 +224,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple down processes all report back as :DOWN", ctx do
-      target = ctx.local_pid()
-      other = ctx.local_pid_b()
+      target = ctx.local_pid
+      other = ctx.local_pid_b
 
       # Establish multiple monitors for each process
       target_ref_a = ZenMonitor.monitor(target)
@@ -248,8 +251,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple already down process all report back as :DOWN", ctx do
-      target = ctx.local_pid()
-      other = ctx.local_pid_b()
+      target = ctx.local_pid
+      other = ctx.local_pid_b
 
       # Kill both local processes
       Process.exit(target, :kill)
@@ -272,8 +275,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "mixed down processes all report back as :DOWN", ctx do
-      target = ctx.local_pid()
-      other = ctx.local_pid_b()
+      target = ctx.local_pid
+      other = ctx.local_pid_b
 
       # Kill target before establishing any monitors
       Process.exit(target, :kill)
@@ -307,7 +310,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "remote process returns a :DOWN message if it goes down", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -325,7 +328,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple monitors all get fired", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process multiple times
       ref_a = ZenMonitor.monitor(target)
@@ -347,7 +350,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "an already down remote process returns a :DOWN message", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Kill the remote process, before the monitors
       Process.exit(target, :kill)
@@ -363,7 +366,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple monitors for alread down remote process returns :DOWN messages", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Kill the remote process, before the monitors
       Process.exit(target, :kill)
@@ -385,7 +388,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "mixed monitors established before and after process down", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Establish some monitors before the pid is killed
       ref_alive_a = ZenMonitor.monitor(target)
@@ -414,8 +417,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple down processes all report back as :DOWN", ctx do
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Establish multiple monitors for each process
       target_ref_a = ZenMonitor.monitor(target)
@@ -439,8 +442,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "multiple already down process all report back as :DOWN", ctx do
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Kill both remote processes
       Process.exit(target, :kill)
@@ -463,8 +466,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "mixed down processes all report back as :DOWN", ctx do
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Kill target before establishing any monitors
       Process.exit(target, :kill)
@@ -488,9 +491,9 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "all monitored processes report back as :DOWN if the node dies", ctx do
-      remote = ctx.compatible()
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      remote = ctx.compatible_peer_pid
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Monitor both remote processes
       target_ref = ZenMonitor.monitor(target)
@@ -499,7 +502,7 @@ defmodule ZenMonitor.BlackBox.Test do
       Helper.await_monitor_established(other_ref, other)
 
       # Stop the remote node
-      assert :ok = :slave.stop(remote)
+      assert :ok = :peer.stop(remote)
       Helper.await_monitor_cleared(target_ref, target)
       Helper.await_monitor_cleared(other_ref, other)
 
@@ -518,7 +521,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "monitoring returns down with :nodedown", ctx do
-      target = ctx.incompatible_pid()
+      target = ctx.incompatible_pid
 
       # Attempt to monitor incompatible node
       ref = ZenMonitor.monitor(target)
@@ -528,8 +531,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "monitoring multiple returns multiple downs with :nodedown", ctx do
-      target = ctx.incompatible_pid()
-      other = ctx.incompatible_pid_b()
+      target = ctx.incompatible_pid
+      other = ctx.incompatible_pid_b
 
       # Attempt to monitor all the incompatible processes
       target_ref = ZenMonitor.monitor(target)
@@ -545,14 +548,14 @@ defmodule ZenMonitor.BlackBox.Test do
     setup [:start_compatible_remote, :start_compatible_processes, :fast_zen_monitor]
 
     test "monitoring a remote process returns a reference", ctx do
-      ref = ZenMonitor.monitor(ctx.compatible_pid())
+      ref = ZenMonitor.monitor(ctx.compatible_pid)
       assert is_reference(ref)
     end
 
     test "subscribing to a previously compatible host will cause :nodedown", ctx do
-      remote = ctx.compatible()
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      remote = ctx.compatible
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Perform an initial monitor
       target_ref = ZenMonitor.monitor(target)
@@ -582,8 +585,8 @@ defmodule ZenMonitor.BlackBox.Test do
     setup [:start_compatible_remote, :start_compatible_processes, :fast_zen_monitor]
 
     test "only the down process sends a :DOWN message", ctx do
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Monitor both remote processes
       target_ref = ZenMonitor.monitor(target)
@@ -603,8 +606,8 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "only the already down process sends a :DOWN message", ctx do
-      target = ctx.compatible_pid()
-      other = ctx.compatible_pid_b()
+      target = ctx.compatible_pid
+      other = ctx.compatible_pid_b
 
       # Kill the target process
       Process.exit(target, :kill)
@@ -625,7 +628,7 @@ defmodule ZenMonitor.BlackBox.Test do
     setup [:start_compatible_remote, :start_compatible_processes, :fast_zen_monitor]
 
     test "prevents :DOWN from being delivered", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -641,7 +644,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test ":DOWN sent before demonitor still exists", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -659,7 +662,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test "only effects the demonitored reference", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process twice
       ref_to_demonitor = ZenMonitor.monitor(target)
@@ -685,7 +688,7 @@ defmodule ZenMonitor.BlackBox.Test do
     setup [:start_compatible_remote, :start_compatible_processes, :fast_zen_monitor]
 
     test "prevents :DOWN from being delivered", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -703,7 +706,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test ":DOWN sent before demonitor will be consumed by the flush", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process
       ref = ZenMonitor.monitor(target)
@@ -721,7 +724,7 @@ defmodule ZenMonitor.BlackBox.Test do
     end
 
     test ":flush only removes the flushed reference", ctx do
-      target = ctx.compatible_pid()
+      target = ctx.compatible_pid
 
       # Monitor the remote process twice
       ref_to_flush = ZenMonitor.monitor(target)

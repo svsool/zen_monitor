@@ -6,8 +6,8 @@ defmodule ZenMonitor.Local.Connector.Test do
   alias ZenMonitor.Test.Support.ObservableGen
 
   setup do
-    {:ok, compatible, nil} = ChildNode.start_link(:zen_monitor, :Compatible)
-    {:ok, incompatible, nil} = ChildNode.start_link(:elixir, :Incompatible)
+    {:ok, compatible, compatible_peer_pid, nil} = ChildNode.start_link(:zen_monitor, :Compatible)
+    {:ok, incompatible, incompatible_peer_pid, nil} = ChildNode.start_link(:elixir, :Incompatible)
 
     start_supervised(ZenMonitor.Supervisor)
 
@@ -24,7 +24,12 @@ defmodule ZenMonitor.Local.Connector.Test do
       end
     end)
 
-    {:ok, compatible: compatible, incompatible: incompatible, down: :down@down}
+    {:ok,
+     compatible: compatible,
+     compatible_peer_pid: compatible_peer_pid,
+     incompatible: incompatible,
+     incompatible_peer_pid: incompatible_peer_pid,
+     down: :down@down}
   end
 
   def disable_sweep(_) do
@@ -154,12 +159,13 @@ defmodule ZenMonitor.Local.Connector.Test do
 
       replacement = Connector.get_for_node(ctx.compatible)
 
-      replacement = if replacement == original do
-        Process.sleep(50)
-        Connector.get_for_node(ctx.compatible)
-      else
-        replacement
-      end
+      replacement =
+        if replacement == original do
+          Process.sleep(50)
+          Connector.get_for_node(ctx.compatible)
+        else
+          replacement
+        end
 
       assert Process.alive?(replacement)
 
@@ -178,7 +184,7 @@ defmodule ZenMonitor.Local.Connector.Test do
     setup [:observe_gen]
 
     test "connecting to a compatible remote node", ctx do
-      compatible = ctx.compatible()
+      compatible = ctx.compatible
 
       assert :compatible = Connector.connect(compatible)
       assert_receive {:observe, :call, {ZenMonitor.Proxy, ^compatible}, :ping, _}
@@ -192,7 +198,7 @@ defmodule ZenMonitor.Local.Connector.Test do
     end
 
     test "connecting to a down remote node", ctx do
-      down = ctx.down()
+      down = ctx.down
 
       assert :incompatible = Connector.connect(down)
       refute_receive {:observe, :call, _, _, _}
@@ -232,7 +238,7 @@ defmodule ZenMonitor.Local.Connector.Test do
     test "remote node crash causes an unavailable cache", ctx do
       assert :miss = Connector.cached_compatibility(ctx.compatible)
       assert :compatible = Connector.connect(ctx.compatible)
-      assert :ok = :slave.stop(ctx.compatible)
+      assert :ok = :peer.stop(ctx.compatible_peer_pid)
 
       assert Helper.wait_until(fn ->
                Connector.cached_compatibility(ctx.compatible) == :unavailable
@@ -248,7 +254,7 @@ defmodule ZenMonitor.Local.Connector.Test do
     end
 
     test "after connecting to a compatible node it becomes compatible", ctx do
-      remote = ctx.compatible()
+      remote = ctx.compatible
 
       assert :incompatible = Connector.compatibility(remote)
       assert :compatible = Connector.connect(remote)
@@ -256,7 +262,7 @@ defmodule ZenMonitor.Local.Connector.Test do
     end
 
     test "after connecting to an incompatible node it remains incompatible", ctx do
-      remote = ctx.incompatible()
+      remote = ctx.incompatible
 
       assert :incompatible = Connector.compatibility(remote)
       assert :incompatible = Connector.connect(remote)
@@ -264,7 +270,7 @@ defmodule ZenMonitor.Local.Connector.Test do
     end
 
     test "after connecting to a down node it remains incompatible", ctx do
-      remote = ctx.down()
+      remote = ctx.down
 
       assert :incompatible = Connector.compatibility(remote)
       assert :incompatible = Connector.connect(remote)
@@ -536,7 +542,7 @@ defmodule ZenMonitor.Local.Connector.Test do
       assert :compatible = Connector.connect(ctx.compatible)
 
       # Stop the node
-      :slave.stop(ctx.compatible)
+      :peer.stop(ctx.compatible_peer_pid)
 
       # Assert that it becomes incompatible
       assert Helper.wait_until(fn ->
@@ -572,7 +578,7 @@ defmodule ZenMonitor.Local.Connector.Test do
       Process.sleep(50)
 
       # Stop the node
-      :slave.stop(ctx.compatible)
+      :peer.stop(ctx.compatible_peer_pid)
 
       # Assert that all the expected messages get enqueued
       assert_receive {:"$gen_cast",
@@ -777,10 +783,10 @@ defmodule ZenMonitor.Local.Connector.Test do
     end
 
     test "sweep will only transmit the requested chunk size", ctx do
-      target_a = ctx.compatible_pid()
-      target_b = ctx.compatible_pid_b()
-      target_c = ctx.compatible_pid_c()
-      remote = ctx.compatible()
+      target_a = ctx.compatible_pid
+      target_b = ctx.compatible_pid_b
+      target_c = ctx.compatible_pid_c
+      remote = ctx.compatible
       connector = Connector.get_for_node(remote)
 
       # Monitor all targets

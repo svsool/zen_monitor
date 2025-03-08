@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :zen_monitor,
   connector_sweep_interval: 10,

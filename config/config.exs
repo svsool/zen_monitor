@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :zen_monitor,
   gen_module: GenServer,

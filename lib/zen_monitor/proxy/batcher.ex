@@ -1,5 +1,4 @@
 defmodule ZenMonitor.Proxy.Batcher do
-
   @moduledoc """
   `ZenMonitor.Proxy.Batcher` is responsible for collecting death_certificates from
   `ZenMonitor.Proxy` destined for the Batcher's subscriber (normally the subscriber is a
@@ -9,9 +8,9 @@ defmodule ZenMonitor.Proxy.Batcher do
   last sweep to the subscriber for processing.
   """
   use GenServer
-  use Instruments.CustomFunctions, prefix: "zen_monitor.proxy.batcher"
 
   alias ZenMonitor.Proxy.Tables
+  alias ZenMonitor.Utils
 
   @chunk_size 5000
   @lookup_timeout 30_000
@@ -50,14 +49,7 @@ defmodule ZenMonitor.Proxy.Batcher do
   """
   @spec get(subscriber :: pid) :: pid
   def get(subscriber) do
-    case GenRegistry.lookup(__MODULE__, subscriber) do
-      {:ok, batcher} ->
-        batcher
-
-      {:error, :not_found} ->
-        {:ok, batcher} = GenRegistry.lookup_or_start(__MODULE__, subscriber, [subscriber], lookup_timeout())
-        batcher
-    end
+    Utils.lookup_or_start(__MODULE__, subscriber, [subscriber])
   end
 
   @doc """
@@ -118,7 +110,6 @@ defmodule ZenMonitor.Proxy.Batcher do
     Application.put_env(:zen_monitor, :batcher_lookup_timeout, timeout)
   end
 
-
   @doc """
   Gets the chunk size from the Application Environment
 
@@ -147,6 +138,7 @@ defmodule ZenMonitor.Proxy.Batcher do
   ## Server
 
   def init(subscriber) do
+    Registry.register(__MODULE__, subscriber, self())
     Process.monitor(subscriber)
     schedule_sweep()
     {:ok, %State{subscriber: subscriber}}
@@ -158,7 +150,8 @@ defmodule ZenMonitor.Proxy.Batcher do
   Simply puts it in the batch queue.
   """
   def handle_cast({:enqueue, pid, reason}, %State{batch: batch, length: length} = state) do
-    increment("enqueue")
+    :telemetry.execute([:zen_monitor, :proxy_batcher, :enqueue], %{}, %{})
+
     {:noreply, %State{state | batch: :queue.in({pid, reason}, batch), length: length + 1}}
   end
 
@@ -189,7 +182,13 @@ defmodule ZenMonitor.Proxy.Batcher do
 
   defp do_sweep(%State{subscriber: subscriber, batch: batch, length: length} = state) do
     {summary, overflow, new_length} = chunk(batch, length)
-    increment("sweep", length - new_length)
+
+    :telemetry.execute(
+      [:zen_monitor, :proxy_batcher, :sweep],
+      %{length: length - new_length},
+      %{}
+    )
+
     Process.send(subscriber, {:dead, node(), :queue.to_list(summary)}, [:noconnect])
     %State{state | batch: overflow, length: new_length}
   end

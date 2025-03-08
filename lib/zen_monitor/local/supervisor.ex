@@ -5,7 +5,7 @@ defmodule ZenMonitor.Local.Supervisor do
   See `ZenMonitor.Local`, `ZenMonitor.Local.Tables`, `ZenMonitor.Local.Connector`, and
   `ZenMonitor.Local.Dispatcher` for more information about the supervised processes.
 
-  There are many `ZenMonitor.Local.Connector` processes, which are managed by a `GenRegistry`.
+  There are many `ZenMonitor.Local.Connector` processes, which are managed by a `Registry`.
   These are keyed by the remote node the Connector is responsible for.
 
   This supervisor uses the `:rest_for_one` strategy, so the order of the children is important and
@@ -21,7 +21,7 @@ defmodule ZenMonitor.Local.Supervisor do
     children = [
       ZenMonitor.Local.Tables,
       ZenMonitor.Local,
-      GenRegistry.Spec.child_spec(ZenMonitor.Local.Connector),
+      {Registry, keys: :unique, name: ZenMonitor.Local.Connector},
       ZenMonitor.Local.Dispatcher
     ]
 
