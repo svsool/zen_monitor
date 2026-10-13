@@ -103,6 +103,29 @@ defmodule ZenMonitor.BlackBox.Test do
     {:ok, subscribing: subscribing, subscribing_peer_pid: subscribing_peer_pid}
   end
 
+  def start_subscribing_remotes(_) do
+    subscribing_nodes =
+      for i <- 1..4 do
+        {:ok, subscribing, _subscribing_peer_pid, nil} =
+          ChildNode.start_link(:zen_monitor, :"Subscribing#{i}")
+
+        # Perform an initial connect like discovery would
+        Node.connect(subscribing)
+
+        on_exit(fn ->
+          Node.monitor(subscribing, true)
+
+          receive do
+            {:nodedown, ^subscribing} -> :ok
+          end
+        end)
+
+        subscribing
+      end
+
+    {:ok, subscribing_nodes: subscribing_nodes}
+  end
+
   def start_compatible_processes(ctx) do
     compatible_pid = Node.spawn(ctx.compatible, Process, :sleep, [:infinity])
     compatible_pid_b = Node.spawn(ctx.compatible, Process, :sleep, [:infinity])
@@ -568,6 +591,92 @@ defmodule ZenMonitor.BlackBox.Test do
       Helper.await_monitor_cleared(ref, target)
 
       # Assert that the monitor established before the node died still fires
+      assert_receive {:DOWN, ^ref, :process, ^target, {:zen_monitor, :killed}}
+    end
+
+    test "remote process returns a :DOWN message after the subscribing node's ZenMonitor goes down",
+         ctx do
+      target = ctx.compatible_pid
+      local = ctx.local_pid
+
+      # Monitor the remote process
+      ref = ZenMonitor.monitor(target)
+      Helper.await_monitor_established(ref, target)
+
+      # Have the subscribing node monitor a local process
+      ChildNode.run(ctx.subscribing, ZenMonitor, :monitor, [local])
+      subscriber = :rpc.call(ctx.subscribing, Connector, :get_for_node, [node()])
+
+      assert Helper.wait_until(fn ->
+               :ets.member(Tables.subscribers(), {local, subscriber})
+             end)
+
+      # Kill the local process so a Batcher starts for the subscribing node's Connector
+      Process.exit(local, :kill)
+      assert Helper.wait_until(fn -> Registry.lookup(Batcher, subscriber) != [] end)
+
+      # Stop the subscribing node's DynamicSupervisor, its Connector goes down while the node stays up
+      assert :ok =
+               :rpc.call(ctx.subscribing, DynamicSupervisor, :stop, [ZenMonitor.DynamicSupervisor])
+
+      assert Helper.wait_until(fn -> Registry.lookup(Batcher, subscriber) == [] end)
+
+      # Kill the remote process
+      Process.exit(target, :kill)
+      Helper.await_monitor_cleared(ref, target)
+
+      # Assert that the monitor established before the supervisor went down still fires
+      assert_receive {:DOWN, ^ref, :process, ^target, {:zen_monitor, :killed}}
+    end
+  end
+
+  describe "Monitoring a remote process while connections to subscribing nodes drop" do
+    setup [
+      :start_compatible_remote,
+      :start_subscribing_remotes,
+      :start_compatible_processes,
+      :start_local_processes,
+      :fast_zen_monitor
+    ]
+
+    test "remote process returns a :DOWN message after 4 subscribing nodes disconnect", ctx do
+      target = ctx.compatible_pid
+      local = ctx.local_pid
+
+      # Monitor the remote process
+      ref = ZenMonitor.monitor(target)
+      Helper.await_monitor_established(ref, target)
+
+      # Have every subscribing node monitor a local process
+      subscribers =
+        Enum.map(ctx.subscribing_nodes, fn subscribing ->
+          ChildNode.run(subscribing, ZenMonitor, :monitor, [local])
+          :rpc.call(subscribing, Connector, :get_for_node, [node()])
+        end)
+
+      assert Helper.wait_until(fn ->
+               Enum.all?(subscribers, &:ets.member(Tables.subscribers(), {local, &1}))
+             end)
+
+      # Kill the local process so a Batcher starts for every subscribing node's Connector
+      Process.exit(local, :kill)
+
+      assert Helper.wait_until(fn ->
+               Enum.all?(subscribers, &(Registry.lookup(Batcher, &1) != []))
+             end)
+
+      # Drop the connections, every subscribing node and its Connector stays up
+      Enum.each(ctx.subscribing_nodes, &(true = Node.disconnect(&1)))
+
+      assert Helper.wait_until(fn ->
+               Enum.all?(subscribers, &(Registry.lookup(Batcher, &1) == []))
+             end)
+
+      # Kill the remote process
+      Process.exit(target, :kill)
+      Helper.await_monitor_cleared(ref, target)
+
+      # Assert that the monitor established before the connections dropped still fires
       assert_receive {:DOWN, ^ref, :process, ^target, {:zen_monitor, :killed}}
     end
   end
