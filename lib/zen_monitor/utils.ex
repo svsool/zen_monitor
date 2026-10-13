@@ -6,17 +6,19 @@ defmodule ZenMonitor.Utils do
         value
 
       [] ->
-        # process will register itself in registry using own pid
-        value = case DynamicSupervisor.start_child(
-            ZenMonitor.DynamicSupervisor,
-            List.to_tuple([module | args])
-          ) do
-          {:ok, pid} ->
-            pid
+        # Never restart workers. A restarted Batcher monitors its dead subscriber again, stops,
+        # and loops until DynamicSupervisor exits. The next lookup starts a fresh worker.
+        child_spec = Supervisor.child_spec(List.to_tuple([module | args]), restart: :temporary)
 
-          {:error, {:already_started, pid}} ->
-            pid
-        end
+        # process will register itself in registry using own pid
+        value =
+          case DynamicSupervisor.start_child(ZenMonitor.DynamicSupervisor, child_spec) do
+            {:ok, pid} ->
+              pid
+
+            {:error, {:already_started, pid}} ->
+              pid
+          end
 
         value
     end
